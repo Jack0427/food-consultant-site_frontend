@@ -5,7 +5,13 @@ import { useEffect, useRef } from "react";
 type Particle = { x: number; y: number; vx: number; vy: number; r: number };
 
 const LINK_DISTANCE = 120;
+const LINK_DISTANCE_SQ = LINK_DISTANCE * LINK_DISTANCE;
 const POINTER_RADIUS = 150;
+const POINTER_LINK_DISTANCE = POINTER_RADIUS * 1.4;
+// 連線依透明度分組，每組只呼叫一次 stroke()，大幅減少繪圖呼叫
+const ALPHA_BUCKETS = 6;
+// 畫布每幀都要整張上傳到 GPU，解析度上限壓在 1.5 倍（粒子本身是柔和光點，差異不明顯）
+const MAX_DPR = 1.5;
 
 /**
  * 裝飾用的「分子網絡」畫布：
@@ -44,7 +50,7 @@ export default function ParticleField({ className }: { className?: string }) {
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
       width = rect.width;
       height = rect.height;
       canvas.width = Math.round(width * dpr);
@@ -54,8 +60,18 @@ export default function ParticleField({ className }: { className?: string }) {
       if (reduceMotion.matches) draw();
     };
 
+    const linkPaths = Array.from({ length: ALPHA_BUCKETS }, () => new Path2D());
+    const pointerPaths = Array.from({ length: ALPHA_BUCKETS }, () => new Path2D());
+    // 距離越近越不透明：把 0～1 的強度對應到分組
+    const bucketOf = (strength: number) => Math.min(ALPHA_BUCKETS - 1, Math.floor(strength * ALPHA_BUCKETS));
+
     const draw = () => {
       ctx.clearRect(0, 0, width, height);
+      for (let k = 0; k < ALPHA_BUCKETS; k++) {
+        linkPaths[k] = new Path2D();
+        pointerPaths[k] = new Path2D();
+      }
+      const dots = new Path2D();
 
       for (let i = 0; i < particles.length; i++) {
         const a = particles[i];
@@ -63,33 +79,38 @@ export default function ParticleField({ className }: { className?: string }) {
           const b = particles[j];
           const dx = a.x - b.x;
           const dy = a.y - b.y;
-          const dist = Math.hypot(dx, dy);
-          if (dist < LINK_DISTANCE) {
-            ctx.strokeStyle = `rgba(217, 155, 38, ${0.22 * (1 - dist / LINK_DISTANCE)})`;
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(b.x, b.y);
-            ctx.stroke();
+          const distSq = dx * dx + dy * dy;
+          if (distSq < LINK_DISTANCE_SQ) {
+            const path = linkPaths[bucketOf(1 - Math.sqrt(distSq) / LINK_DISTANCE)];
+            path.moveTo(a.x, a.y);
+            path.lineTo(b.x, b.y);
           }
         }
 
         if (pointer.active) {
           const dist = Math.hypot(a.x - pointer.x, a.y - pointer.y);
-          if (dist < POINTER_RADIUS * 1.4) {
-            ctx.strokeStyle = `rgba(247, 200, 115, ${0.4 * (1 - dist / (POINTER_RADIUS * 1.4))})`;
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(pointer.x, pointer.y);
-            ctx.stroke();
+          if (dist < POINTER_LINK_DISTANCE) {
+            const path = pointerPaths[bucketOf(1 - dist / POINTER_LINK_DISTANCE)];
+            path.moveTo(a.x, a.y);
+            path.lineTo(pointer.x, pointer.y);
           }
         }
 
-        ctx.fillStyle = "rgba(247, 200, 115, 0.85)";
-        ctx.beginPath();
-        ctx.arc(a.x, a.y, a.r, 0, Math.PI * 2);
-        ctx.fill();
+        dots.moveTo(a.x + a.r, a.y);
+        dots.arc(a.x, a.y, a.r, 0, Math.PI * 2);
       }
+
+      ctx.lineWidth = 1;
+      for (let k = 0; k < ALPHA_BUCKETS; k++) {
+        // 以分組中間值作為透明度
+        const strength = (k + 0.5) / ALPHA_BUCKETS;
+        ctx.strokeStyle = `rgba(217, 155, 38, ${0.22 * strength})`;
+        ctx.stroke(linkPaths[k]);
+        ctx.strokeStyle = `rgba(247, 200, 115, ${0.4 * strength})`;
+        ctx.stroke(pointerPaths[k]);
+      }
+      ctx.fillStyle = "rgba(247, 200, 115, 0.85)";
+      ctx.fill(dots);
     };
 
     const step = () => {

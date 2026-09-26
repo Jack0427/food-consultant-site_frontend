@@ -5,6 +5,7 @@ import { motion, useInView, useScroll, useSpring } from "framer-motion";
 import { Clock, Info } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { cn } from "@/lib/cn";
+import { useLayerWhileAnimating } from "@/lib/useLayerWhileAnimating";
 import Reveal from "./ui/Reveal";
 import SectionHeading from "./ui/SectionHeading";
 
@@ -47,6 +48,7 @@ export default function Process() {
 function Step({ index, title, text, duration }: { index: number; title: string; text: string; duration: string }) {
   const ref = useRef<HTMLLIElement>(null);
   const inView = useInView(ref, { once: true, margin: "0px 0px -35% 0px" });
+  const layer = useLayerWhileAnimating<HTMLDivElement>();
 
   return (
     <li ref={ref} className="relative flex gap-5 sm:gap-8">
@@ -60,6 +62,7 @@ function Step({ index, title, text, duration }: { index: number; title: string; 
         {index + 1}
       </span>
       <motion.div
+        {...layer}
         initial={{ x: 32 }}
         animate={inView ? { x: 0 } : undefined}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}

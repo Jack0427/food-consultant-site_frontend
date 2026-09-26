@@ -82,8 +82,9 @@ export default function Navbar() {
     <header
       className={cn(
         "fixed inset-x-0 top-0 z-50 border-b transition-[background-color,border-color,box-shadow] duration-300",
+        // 捲動後背景幾乎不透明，不再使用 backdrop-blur：它會在每次捲動時重新模糊底下的內容
         scrolled || menuOpen
-          ? "border-base-700 bg-base-950/95 shadow-xl backdrop-blur-md"
+          ? "border-base-700 bg-base-950/95 shadow-xl"
           : "border-transparent bg-base-950/40 backdrop-blur-sm",
       )}
     >

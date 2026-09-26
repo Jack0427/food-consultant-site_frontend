@@ -48,8 +48,13 @@ pnpm test:e2e:report   # 開啟上次的 HTML 報告
   - 按鈕名稱若需補充情境，用 `aria-label`，不要用 `sr-only` span，否則會多出空格。
   - 顏色只用 `globals.css` 的 `@theme` 權杖。淺色背景上的強調色用 `accent-deep`，深色背景上的次要文字用 `muted`。
 - **動畫**
-  - `Reveal` 只做位移與縮放，**不可用 `opacity: 0` 當初始狀態**。否則未捲到的區塊、截圖或 JS 未啟動時，畫面會是空白。
+  - `Reveal` 只做位移，**不可用 `opacity: 0` 當初始狀態**。否則未捲到的區塊、截圖或 JS 未啟動時，畫面會是空白。
   - 需要尊重 `prefers-reduced-motion`。
+  - **捲動效能**（曾因此造成明顯卡頓，已實測修正）：
+    - 捲動觸發的進場動畫**不要用 `scale`**。縮放每一幀都要以新比例重新點陣化整塊內容；位移只需移動圖層。
+    - framer-motion 的位移動畫要搭配 `useLayerWhileAnimating()`（`src/lib/`）：播放期間加 `will-change`，播完移除。不要常駐 `will-change`。
+    - 避免在捲動中的固定元素上使用 `backdrop-filter`。
+    - `ParticleField` 每幀都會把整張畫布上傳到 GPU：解析度上限 `MAX_DPR`，連線依透明度分組批次 `stroke()`。調整粒子數或解析度前，先量測。
 - 會隨語言改變的文字，不要拿來當 React `key`。否則切換語言時元素會重新掛載並重播進場動畫，看起來像沒有反應。
 - SSR 與瀏覽器各自計算的浮點數（例如 SVG 座標）要先四捨五入，避免 hydration 不一致。
 
