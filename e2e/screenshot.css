@@ -1,0 +1,22 @@
+/* 只在 toHaveScreenshot 截圖時套用：隱藏每次都不同或與畫面無關的元素 */
+
+/* Next.js dev 工具的浮動按鈕 */
+nextjs-portal {
+  display: none !important;
+}
+
+/* 粒子位置是隨機產生的 */
+canvas {
+  visibility: hidden !important;
+}
+
+/* 隨捲動位置變化的元素（例如捲動進度條），在元件上加 data-screenshot-hide */
+[data-screenshot-hide] {
+  visibility: hidden !important;
+}
+
+/* 固定定位的導覽列與跳至主內容連結改成停在頁首，不要疊在其他區塊的截圖上 */
+body header.fixed,
+a[href="#main"] {
+  position: absolute !important;
+}

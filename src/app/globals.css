@@ -1,26 +1,101 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* 色彩設計權杖：深墨綠為底、琥珀金點綴。所有文字與背景組合皆符合 WCAG AA 對比度 */
+@theme {
+  --color-base-950: #081a14;
+  --color-base-900: #0e2b21;
+  --color-base-800: #153c2f;
+  --color-base-700: #1e503f;
+  --color-base-600: #296853;
+  --color-base-200: #e2ebd7;
+  --color-base-100: #f0f5ed;
+  --color-base-50: #f8faf7;
+
+  --color-accent-gold: #d99b26;
+  --color-accent-amber: #e07a2b;
+  --color-accent-light: #f7c873;
+  /* 淺色背景上使用的深金色（對 base-50 對比約 5.7:1） */
+  --color-accent-deep: #8a5a0b;
+  /* 深色背景上的次要文字（對 base-950 對比約 11:1） */
+  --color-muted: #b9c9b4;
+
+  --font-sans: var(--font-geist-sans), "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  /* 固定導覽列高度的補償，讓錨點跳轉時標題不會被遮住 */
+  scroll-padding-top: 5.5rem;
+  scroll-behavior: smooth;
+  background-color: var(--color-base-950);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-base-950);
+  color: #fff;
+  font-family: var(--font-sans);
+  overflow-x: clip;
+}
+
+/* 鍵盤操作時明顯可見的焦點框 */
+:focus-visible {
+  outline: 3px solid var(--color-accent-light);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--color-accent-gold);
+  color: var(--color-base-950);
+}
+
+/* 服務卡片的游標聚光效果（位置由 JS 寫入 --x / --y） */
+.spotlight {
+  position: relative;
+  isolation: isolate;
+}
+.spotlight::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: radial-gradient(
+    420px circle at var(--x, 50%) var(--y, 0%),
+    rgb(217 155 38 / 0.14),
+    transparent 45%
+  );
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.spotlight:hover::before,
+.spotlight:focus-within::before {
+  opacity: 1;
+}
+
+@keyframes float-hint {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(6px); }
+}
+.animate-float-hint {
+  animation: float-hint 1.8s ease-in-out infinite;
+}
+
+/* 尊重使用者的「減少動態」設定 */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 程式移入焦點的區塊（tabindex="-1"）不顯示焦點框 */
+[tabindex="-1"]:focus {
+  outline: none;
 }
