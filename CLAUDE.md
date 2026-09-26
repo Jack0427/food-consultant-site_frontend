@@ -21,6 +21,7 @@ pnpm test:e2e:report   # 開啟上次的 HTML 報告
 
 ## 部署（GitHub Pages）
 
+- 網址：https://jack0427.github.io/food-consultant-site_frontend/（repo：`Jack0427/food-consultant-site_frontend`，公開）
 - `next.config.ts` 設定 `output: "export"`，`pnpm build` 會輸出純靜態檔案到 `out/`。
 - **不能使用需要伺服器的功能**：Server Actions、Route Handlers、cookies、rewrites／redirects／headers、`next/image` 預設 loader 等。
 - `basePath` 由環境變數 `PAGES_BASE_PATH` 帶入（Actions 會設成 `/<repo 名稱>`）；本機開發與測試維持根路徑。引用 `public/` 內的檔案時要加上 basePath。
