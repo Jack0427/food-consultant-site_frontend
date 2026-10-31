@@ -45,3 +45,6 @@ next-env.d.ts
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# 程式碼符號索引（scripts/code-index.mjs 產生）
+.claude/code-index.txt

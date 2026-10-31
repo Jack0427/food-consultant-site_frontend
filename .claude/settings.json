@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && { node scripts/code-index.mjs --check >/dev/null 2>&1 || node scripts/code-index.mjs >/dev/null 2>&1; node scripts/code-index.mjs --check 2>&1; }; exit 0",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

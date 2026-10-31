@@ -40,6 +40,17 @@ pnpm test:e2e:report   # 開啟上次的 HTML 報告
   - `locales/en.ts` 是型別來源（`Dictionary`），`zh-TW.ts` 必須符合同一型別。
 - 動畫元件：`ParticleField`（canvas 粒子，會回應游標、觸控與捲動）、`Hero`（捲動視差、游標 3D 傾斜）、`ScrollProgress`、`ui/Reveal`（進場動畫）、`Process`（時間軸線條隨捲動填滿）。
 
+## 程式碼索引（給 AI 助理用）
+
+- 上面的「架構」是專案地圖，`.claude/code-index.txt` 是函式層級的符號索引，由 `node scripts/code-index.mjs` 用 TypeScript 編譯器產生。
+- 找程式碼時：先依「架構」縮小範圍，再 grep 索引查定義與引用，最後只讀索引指到的行。
+  - 定義在哪：`grep -E "^DEF .* 名稱( |$)" .claude/code-index.txt`
+  - 被誰使用：`grep -E "\-> 名稱 @" .claude/code-index.txt`
+  - 檔案匯入了什麼：`grep "^IMP 路徑:" .claude/code-index.txt`
+- 索引只記錄頂層宣告。物件方法（例如 `goToInquiry()`）、字串形式的關係（翻譯 key）、CSS class 不在索引內，需要時直接 grep 原始碼。
+- 對話開始時、或修改程式碼之後，執行 `node scripts/code-index.mjs --check`。它會檢查索引是否過時，以及本節之前的「架構」提到的路徑與名稱是否還存在。索引過時就重新產生。
+- 新增或刪除目錄、模組，或模組職責改變時，同步更新「架構」。一般修改不用動。
+
 ## 開發慣例
 
 - **文案一律放在 locale 檔**。新增文字時 `en.ts` 與 `zh-TW.ts` 都要加；型別會強制兩邊結構一致。
