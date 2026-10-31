@@ -4,9 +4,10 @@
 //
 //   node scripts/code-index.mjs          產生 .claude/code-index.txt
 //   node scripts/code-index.mjs --check  檢查索引是否過時，以及 CLAUDE.md「架構」段落提到的路徑與名稱是否存在
+//   node scripts/code-index.mjs --at 檔案:行  查這一行屬於哪個頂層定義與其行範圍（讀索引，不重新解析）
 //
 // 索引每行一筆、可直接 grep：
-//   DEF 檔案:行 種類 名稱 [export]
+//   DEF 檔案:開始行-結束行 種類 名稱 [export]     （定義內部的具名函式：種類為 inner，結尾加 in 所屬定義）
 //   IMP 檔案:行 -> 來源模組 {匯入名稱}   （re-export 為 REEXP）
 //   USE 檔案:行 所在符號 -> 名稱 @定義檔案:行 [type]
 
@@ -40,6 +41,7 @@ function createProgram() {
 }
 
 const lineOf = (sf, node) => sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
+const endLineOf = (sf, node) => sf.getLineAndCharacterOfPosition(node.getEnd()).line + 1;
 
 // 檔案頂層宣告：[{ name, kind, node, exported }]
 function topLevelDeclarations(sf) {
@@ -65,6 +67,32 @@ function topLevelDeclarations(sf) {
       }
     }
   }
+  return out;
+}
+
+// 頂層定義內部（任意深度）的具名函式：function 宣告，或以箭頭函式／函式運算式初始化的變數
+function innerFunctions(top) {
+  const out = [];
+  const isFn = (n) => n && (ts.isArrowFunction(n) || ts.isFunctionExpression(n));
+  // 呼叫的參數中有函式，例如 useCallback(() => …)、useActionState(async () => …)、useEffect(() => …)
+  const callWithFn = (n) => n && ts.isCallExpression(n) && n.arguments.some(isFn);
+  const visit = (node) => {
+    if (node !== top) {
+      if (ts.isFunctionDeclaration(node) && node.name) {
+        out.push({ name: node.name.text, span: node });
+      } else if (ts.isVariableDeclaration(node) && (isFn(node.initializer) || callWithFn(node.initializer))) {
+        // 名稱：一般變數用識別字；解構（const [a, b] = useX(...)）用壓縮後的樣式文字
+        const name = ts.isIdentifier(node.name) ? node.name.text : node.name.getText().replace(/\s+/g, "");
+        const stmt = node.parent.declarations.length === 1 ? node.parent.parent : node;
+        out.push({ name, span: stmt });
+      } else if (ts.isExpressionStatement(node) && callWithFn(node.expression)) {
+        // 沒有接收回傳值的 hook 呼叫（useEffect 等）以被呼叫的函式名稱命名
+        out.push({ name: node.expression.expression.getText().replace(/\s+/g, ""), span: node });
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(top, visit);
   return out;
 }
 
@@ -98,9 +126,15 @@ function buildIndex() {
   const defLines = [];
   for (const sf of files) {
     for (const d of topLevelDeclarations(sf)) {
-      const info = { name: d.name, file: rel(sf.fileName), line: lineOf(sf, d.node) };
+      // 只有一個宣告的變數敘述，以整個敘述（含 export const）為範圍
+      const span = ts.isVariableDeclaration(d.node) && d.node.parent.declarations.length === 1 ? d.node.parent.parent : d.node;
+      const info = { name: d.name, file: rel(sf.fileName), line: lineOf(sf, span) };
       declByNode.set(d.node, info);
-      defLines.push(`DEF ${info.file}:${info.line} ${d.kind} ${d.name}${d.exported ? " export" : ""}`);
+      defLines.push(`DEF ${info.file}:${info.line}-${endLineOf(sf, span)} ${d.kind} ${d.name}${d.exported ? " export" : ""}`);
+      // 定義內部的具名函式只記錄範圍（讓 --at 能回傳較小的區段），不參與 USE 引用解析
+      for (const inner of innerFunctions(d.node)) {
+        defLines.push(`DEF ${info.file}:${lineOf(sf, inner.span)}-${endLineOf(sf, inner.span)} inner ${inner.name} in ${d.name}`);
+      }
     }
   }
 
@@ -150,7 +184,7 @@ function buildIndex() {
   const header = [
     `# code-index  generated ${new Date().toISOString()}  files=${files.length}  defs=${defLines.length}  uses=${useSet.size}`,
     "# 由 scripts/code-index.mjs 產生，勿手動編輯。",
-    "# 格式：DEF 檔案:行 種類 名稱 [export] | IMP/REEXP 檔案:行 -> 來源 {名稱} | USE 檔案:行 所在符號 -> 名稱 @定義:行 [type]",
+    "# 格式：DEF 檔案:開始行-結束行 種類 名稱 [export]（內部函式為 inner 名稱 in 所屬定義） | IMP/REEXP 檔案:行 -> 來源 {名稱} | USE 檔案:行 所在符號 -> 名稱 @定義:行 [type]",
     `# FILES ${files.map((sf) => rel(sf.fileName)).join(" ")}`,
   ];
   const body = [...defLines, ...impLines, ...[...useSet].sort()];
@@ -238,7 +272,31 @@ function checkMap(problems, defNames) {
   }
 }
 
-if (process.argv.includes("--check")) {
+// ---- --at 檔案:行 ----
+
+function lookupAt(arg) {
+  const m = /^(.+):(\d+)$/.exec(arg ?? "");
+  if (!m) {
+    console.log("用法：node scripts/code-index.mjs --at 檔案:行");
+    process.exit(2);
+  }
+  const [, file, lineText] = m;
+  const line = Number(lineText);
+  const target = path.relative(ROOT, path.resolve(ROOT, file));
+  const text = fs.readFileSync(INDEX_PATH, "utf8");
+  const hits = [...text.matchAll(/^DEF (\S+):(\d+)-(\d+) (.*)$/gm)]
+    .filter(([, f, s, e]) => f === target && Number(s) <= line && line <= Number(e))
+    .sort((a, b) => Number(a[3]) - Number(a[2]) - (Number(b[3]) - Number(b[2])));
+  if (!hits.length) {
+    console.log(`${target}:${line} 不在任何頂層定義內（可能是 import 或檔案層級的程式碼）`);
+    return;
+  }
+  for (const [, f, s, e, rest] of hits) console.log(`${f}:${s}-${e} ${rest}  （Read offset=${s} limit=${Number(e) - Number(s) + 1}）`);
+}
+
+if (process.argv.includes("--at")) {
+  lookupAt(process.argv[process.argv.indexOf("--at") + 1]);
+} else if (process.argv.includes("--check")) {
   const problems = [];
   const defNames = checkIndex(problems);
   checkMap(problems, defNames);

@@ -43,11 +43,13 @@ pnpm test:e2e:report   # 開啟上次的 HTML 報告
 ## 程式碼索引（給 AI 助理用）
 
 - 上面的「架構」是專案地圖，`.claude/code-index.txt` 是函式層級的符號索引，由 `node scripts/code-index.mjs` 用 TypeScript 編譯器產生。
-- 找程式碼時：先依「架構」縮小範圍，再 grep 索引查定義與引用，最後只讀索引指到的行。
-  - 定義在哪：`grep -E "^DEF .* 名稱( |$)" .claude/code-index.txt`
+- 找程式碼時：先依「架構」縮小範圍，再 grep 索引查定義與引用，最後依索引的行範圍讀取。
+  - 定義在哪、範圍多大：`grep -E "^DEF .* 名稱( |$)" .claude/code-index.txt`，結果是 `DEF 檔案:開始行-結束行 ...`，Read 用 offset=開始行、limit=結束行−開始行+1。
+  - 某一行屬於哪一段：`node scripts/code-index.mjs --at 檔案:行`，由小到大列出包住這一行的範圍，並附上 offset 和 limit。
   - 被誰使用：`grep -E "\-> 名稱 @" .claude/code-index.txt`
   - 檔案匯入了什麼：`grep "^IMP 路徑:" .claude/code-index.txt`
-- 索引只記錄頂層宣告。物件方法（例如 `goToInquiry()`）、字串形式的關係（翻譯 key）、CSS class 不在索引內，需要時直接 grep 原始碼。
+- 讀多少：檔案約 200 行以內就整份讀。超過時，讀 `--at` 回傳的最小範圍；需要元件的 state 或 hook 時，再讀外層定義從開頭到第一個 inner 範圍之前的部分。
+- 索引內容：頂層宣告，加上定義內部的具名函式和 hook 回呼（`inner`，例如 `goToInquiry`、`useEffect`）。`inner` 只記錄範圍，沒有記錄使用處；它們的使用處（例如透過 Context 呼叫 `goToInquiry`）、字串形式的關係（翻譯 key）、CSS class 都要直接 grep 原始碼。
 - 對話開始時、或修改程式碼之後，執行 `node scripts/code-index.mjs --check`。它會檢查索引是否過時，以及本節之前的「架構」提到的路徑與名稱是否還存在。索引過時就重新產生。
 - 新增或刪除目錄、模組，或模組職責改變時，同步更新「架構」。一般修改不用動。
 
